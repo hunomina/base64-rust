@@ -1,18 +1,15 @@
 fn main() {
-    println!("{}", encode("S".into()));
-    println!("{}", encode("Su".into()));
     println!("{}", encode("Sun".into()));
+
+    //println!("{}", decode("Uw==".into()));
+    //println!("{}", decode("U3U=".into()));
+    println!("{}", decode("U3Vu".into()));
 }
 
 const NBR_BITS_TO_READ: u8 = 6;
 const SIZE_OF_CHAR: u8 = 8;
 const PADDING_CHAR: char = '=';
-const BASE_64_ALPHABET: &[char] = &[
-    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H', 'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P', 'Q', 'R', 'S',
-    'T', 'U', 'V', 'W', 'X', 'Y', 'Z', 'a', 'b', 'c', 'd', 'e', 'f', 'g', 'h', 'i', 'j', 'k', 'l',
-    'm', 'n', 'o', 'p', 'q', 'r', 's', 't', 'u', 'v', 'w', 'x', 'y', 'z', '0', '1', '2', '3', '4',
-    '5', '6', '7', '8', '9', '+', '/',
-];
+const BASE_64_ALPHABET: &str = &"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 fn encode(s: String) -> String {
     let bytes = s.as_bytes();
@@ -48,7 +45,7 @@ fn encode(s: String) -> String {
             };
 
             c += NBR_BITS_TO_READ;
-            BASE_64_ALPHABET[encoded as usize]
+            BASE_64_ALPHABET.chars().nth(encoded as usize).unwrap()
         })
         .collect();
 
@@ -64,6 +61,46 @@ fn encode(s: String) -> String {
     }
 
     encoded_string
+}
+
+fn decode(s: String) -> String {
+    let mut decoded_s = String::new();
+    let mut bytes = s.bytes();
+    while bytes.len() > 0 {
+        // The number of characters of a Base64 encoded string is always divisable by four.
+        // Thus we can process four characters of the string in one step to retrieve three decoded bytes
+        let (first_char, second_char, third_char, fourth_char) = (
+            bytes.nth(0).unwrap(),
+            bytes.nth(0).unwrap(),
+            bytes.nth(0).unwrap(),
+            bytes.nth(0).unwrap(),
+        );
+
+        // look up for the corresponding chars in the alphabet / reverse lookup
+        // unwrap_or here allows to replace the padding char, that can't be found in the alphabet, by the NUL char
+        let (first_char, second_char, third_char, fourth_char) = (
+            BASE_64_ALPHABET.find(first_char as char).unwrap() as u8,
+            BASE_64_ALPHABET.find(second_char as char).unwrap() as u8,
+            BASE_64_ALPHABET.find(third_char as char).unwrap_or(0) as u8,
+            BASE_64_ALPHABET.find(fourth_char as char).unwrap_or(0) as u8,
+        );
+
+        // merge the four encoded chars into 3 decoded chars
+        // reminder: base64 chars are encoded on 6 bits
+        let (first_char, second_char, third_char) = (
+            first_char << 2 | get_n_first_bit(second_char << 2, 2),
+            get_n_last_bits(second_char, 4) << 4 | get_n_first_bit(third_char << 2, 4),
+            get_n_last_bits(third_char, 2) << 6 | fourth_char,
+        );
+
+        // add them to the decoded string
+        decoded_s.push_str(&format!(
+            "{}{}{}",
+            first_char as char, second_char as char, third_char as char
+        ));
+    }
+
+    decoded_s.trim_end_matches(0 as char).into()
 }
 
 fn get_n_first_bit(number: u8, n: u8) -> u8 {
@@ -92,6 +129,13 @@ mod tests {
         test_cases()
             .into_iter()
             .for_each(|(original, encoded)| assert_eq!(encoded, encode(original.into())))
+    }
+
+    #[test]
+    fn b64_decode() {
+        test_cases()
+            .into_iter()
+            .for_each(|(original, encoded)| assert_eq!(original, decode(encoded.into())))
     }
 
     fn test_cases<'a>() -> HashMap<&'a str, &'a str> {
