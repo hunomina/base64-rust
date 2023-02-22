@@ -16,8 +16,6 @@ const BASE_64_ALPHABET: &[char] = &[
 
 fn encode(s: String) -> String {
     let bytes = s.as_bytes();
-    println!("{:?}", s);
-    println!("{:?}", bytes);
 
     let nbr_of_encoded_parts = (s.len() as f32 * 8.0 / NBR_BITS_TO_READ as f32).ceil() as usize;
     let mut c = 0;
