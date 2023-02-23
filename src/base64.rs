@@ -1,52 +1,51 @@
 const NBR_BITS_TO_READ: u8 = 6;
-const SIZE_OF_CHAR: u8 = 8;
 const PADDING_CHAR: char = '=';
-const BASE_64_ALPHABET: &str = &"ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+const BASE_64_ALPHABET: &str = "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
 
 pub fn encode(s: String) -> String {
     let bytes = s.as_bytes();
+    let number_of_byte_groups = bytes.len() / 3 + if bytes.len() % 3 == 0 { 0 } else { 1 };
 
-    let nbr_of_encoded_parts = (s.len() as f32 * 8.0 / NBR_BITS_TO_READ as f32).ceil() as usize;
-    let mut c = 0;
-    let mut encoded_string: String = (0..nbr_of_encoded_parts)
-        .map(|n| {
-            let current_char = n * NBR_BITS_TO_READ as usize / SIZE_OF_CHAR as usize;
-            // index of the bit from the current character where we start to read from
-            // is always a multiple of two, since we read 6 bits during each iteration
-            let nth_bit = c % SIZE_OF_CHAR;
+    let mut encoded_string = (0..number_of_byte_groups)
+        .flat_map(|n| {
+            let (first_char, second_char, third_char) =
+                (*bytes.get(n).unwrap(), bytes.get(n + 1), bytes.get(n + 2));
 
-            let encoded = match nth_bit {
-                0 => get_n_first_bit(bytes[current_char], NBR_BITS_TO_READ),
-                2 => get_n_last_bits(bytes[current_char], NBR_BITS_TO_READ),
-                _ => {
-                    // in this situation, nth_bit could either be 4 or 6
-                    // so we need to concatanate two groups of bits
+            let mut encoded_chars = vec![];
 
-                    // 8 - nth_bit: number of bits read from the previous character
-                    let nbr_of_bits_to_read_from_next_char =
-                        NBR_BITS_TO_READ - (SIZE_OF_CHAR - nth_bit);
-                    let bits_from_current_char =
-                        get_n_last_bits(bytes[current_char], SIZE_OF_CHAR - nth_bit);
-                    let bits_from_next_char = get_n_first_bit(
-                        *bytes.get(current_char + 1).unwrap_or(&0u8),
-                        nbr_of_bits_to_read_from_next_char,
-                    );
-                    bits_from_current_char << nbr_of_bits_to_read_from_next_char
-                        | bits_from_next_char
-                }
-            };
+            let first_encoded_char = get_n_first_bit(first_char, NBR_BITS_TO_READ);
+            encoded_chars.push(first_encoded_char);
 
-            c += NBR_BITS_TO_READ;
-            BASE_64_ALPHABET.chars().nth(encoded as usize).unwrap()
+            let second_encoded_char = get_n_last_bits(first_char, 2) << 4
+                | get_n_first_bit(*second_char.unwrap_or(&0), 4);
+            encoded_chars.push(second_encoded_char);
+
+            if second_char.is_none() {
+                return encoded_chars;
+            }
+
+            let third_encoded_char = get_n_last_bits(*second_char.unwrap(), 4) << 2
+                | get_n_first_bit(*third_char.unwrap_or(&0), 2);
+            encoded_chars.push(third_encoded_char);
+
+            if third_char.is_none() {
+                return encoded_chars;
+            }
+
+            let fourth_encoded_char = get_n_last_bits(*third_char.unwrap(), NBR_BITS_TO_READ);
+            encoded_chars.push(fourth_encoded_char);
+
+            encoded_chars
         })
-        .collect();
+        .map(|c| BASE_64_ALPHABET.chars().nth(c as usize).unwrap())
+        .collect::<String>();
 
     match encoded_string.len() % 4 {
-        3 => {
-            encoded_string.push(PADDING_CHAR);
-        }
         2 => {
             encoded_string.push(PADDING_CHAR);
+            encoded_string.push(PADDING_CHAR);
+        }
+        3 => {
             encoded_string.push(PADDING_CHAR);
         }
         _ => {}
@@ -62,10 +61,10 @@ pub fn decode(s: String) -> String {
         // The number of characters of a Base64 encoded string is always divisable by four.
         // Thus we can process four characters of the string in one step to retrieve three decoded bytes
         let (first_char, second_char, third_char, fourth_char) = (
-            bytes.nth(0).unwrap(),
-            bytes.nth(0).unwrap(),
-            bytes.nth(0).unwrap(),
-            bytes.nth(0).unwrap(),
+            bytes.next().unwrap(),
+            bytes.next().unwrap(),
+            bytes.next().unwrap(),
+            bytes.next().unwrap(),
         );
 
         // look up for the corresponding chars in the alphabet / reverse lookup
@@ -99,7 +98,7 @@ fn get_n_first_bit(number: u8, n: u8) -> u8 {
     if n == 0 {
         0
     } else {
-        number >> 8 - n
+        number >> (8 - n)
     }
 }
 
